@@ -4,16 +4,18 @@ import cats.effect.Temporal
 
 import scala.concurrent.duration.FiniteDuration
 import fs2._
+import org.typelevel.log4cats.Logger
+import org.typelevel.log4cats.syntax._
 
 trait Monitor[F[_]] {
   def start(period: FiniteDuration): F[Unit]
 }
 
 object Monitor {
-  def impl[F[_]: Temporal](synchronizer: Synchronizer[F]): Monitor[F] =
+  def impl[F[_]: Temporal: Logger](synchronizer: Synchronizer[F]): Monitor[F] =
     (period: FiniteDuration) =>
       (synchronizer.synchronize ++ Stream
         .fixedRate(period)
-        .debug(_ => "\ncheck for synchronize")
+        .evalMap(_ => info"check source")
         .flatMap(_ => synchronizer.synchronize)).compile.drain
 }
