@@ -1,7 +1,8 @@
 = File-watcher
 
+Synchronizes files from source folder into replica folder with given period.
 
-=== First level heading
+=== Launch
 
 ```bash
 $ sbt run <path-to-source> <path-to-replica> <period-in-seconds>
