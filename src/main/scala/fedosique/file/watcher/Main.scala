@@ -14,7 +14,7 @@ object Main extends IOApp {
       case source :: replica :: period :: Nil =>
         def verifyPath(pathStr: String): IO[Path] = {
           val path = Path(pathStr)
-          Files[IO].exists(path).ifM(IO(path), IO.raiseError(PathDoesNotExist(path)))
+          Files[IO].isDirectory(path).ifM(IO(path), IO.raiseError(PathDoesNotExist(path)))
         }
 
         val verifyPeriod = period.toLongOption match {
