@@ -1,6 +1,6 @@
 package fedosique.file.watcher
 
-import cats.{Functor, Monad}
+import cats.Monad
 import cats.effect.kernel.Concurrent
 import fs2.io.file.{Files, Path}
 

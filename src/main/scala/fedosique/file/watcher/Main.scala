@@ -3,7 +3,6 @@ package fedosique.file.watcher
 import cats.effect._
 import fs2.io.file.Path
 import org.typelevel.log4cats.slf4j.Slf4jLogger
-import org.typelevel.log4cats.syntax.LoggerInterpolator
 
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.FiniteDuration
@@ -13,14 +12,16 @@ import scala.concurrent.duration.FiniteDuration
 // add watcher
 // add logging to file
 object Main extends IOApp {
-  def program(source: Path, replica: Path, period: FiniteDuration): IO[Unit] =
-    Slf4jLogger.create[IO].flatMap { implicit l =>
-      val watcher      = Watcher.impl[IO](source, replica)
-      val synchronizer = Synchronizer.make[IO](source, replica, watcher)
-      val monitor      = Monitor.impl(synchronizer)
-
-      info"starting application" *> monitor.start(period)
-    }
+  def program(source: Path, replica: Path, period: FiniteDuration): IO[Unit] = {
+    val watcher = Watcher.impl[IO](source, replica)
+    for {
+      logger       <- Slf4jLogger.create[IO]
+      synchronizer <- Synchronizer.make(source, replica, watcher)
+      monitor      <- Monitor.make(synchronizer)
+      _            <- logger.info("starting application")
+      _            <- monitor.start(period)
+    } yield ()
+  }
 
   def verifyArgs(args: List[String]): Either[String, List[String]] = ???
 
