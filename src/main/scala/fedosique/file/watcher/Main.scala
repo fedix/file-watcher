@@ -11,6 +11,7 @@ import scala.concurrent.duration.FiniteDuration
 // deletion
 // copy replaceExisting
 // custom error type
+// add watcher
 object Main extends IOApp {
   def program(source: Path, replica: Path, period: FiniteDuration): IO[Unit] =
     Slf4jLogger.create[IO].flatMap { implicit l =>

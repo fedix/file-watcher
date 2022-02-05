@@ -13,6 +13,8 @@ trait Synchronizer[F[_]] {
   def synchronize: Stream[F, Unit]
 }
 
+case class WatchResult(toUpdate: List[Path], toDelete: List[Path])
+
 object Synchronizer {
   class FileSynchronizer[F[_]: Files: Concurrent: Monad: Logger](source: Path, replica: Path) extends Synchronizer[F] {
     import cats.syntax.all._
@@ -30,8 +32,9 @@ object Synchronizer {
         replicaFiles <- listFiles(replica)
       } yield {
         val replicaFileNames = replicaFiles.map { case (p, _) => p.fileName }
+        val sourceFileNames  = sourceFiles.map { case (p, _) => p.fileName }
 
-        sourceFiles.collect {
+        val createdOrUpdated = sourceFiles.collect {
           case (sourcePath, _) if !replicaFileNames.contains(sourcePath.fileName) =>
             Some(sourcePath)
           case (sourcePath, sourceTime) =>
@@ -41,15 +44,31 @@ object Synchronizer {
               }
               .map(_._1)
         }.flatten
+
+        val deleted = replicaFiles.collect {
+          case (replicatedFile, _) if !sourceFileNames.contains(replicatedFile.fileName) =>
+            Some(replicatedFile)
+        }.flatten
+
+        WatchResult(createdOrUpdated, deleted)
       }
+
+    private def updatePipe: Pipe[F, WatchResult, Unit] =
+      _.flatMap(r => Stream.emits(r.toUpdate))
+        .evalTap(p => info"replicating ${p.fileName} to ${replica / p.fileName}")
+        .mapAsync(4) { p =>
+          Files[F].copy(p, replica / p.fileName, CopyFlags(CopyFlag.ReplaceExisting))
+        }
+
+    private def deletePipe: Pipe[F, WatchResult, Unit] =
+      _.flatMap(r => Stream.emits(r.toDelete))
+        .evalTap(p => info"deleting $p")
+        .mapAsync(4)(Files[F].delete)
 
     override def synchronize: Stream[F, Unit] =
       Stream
-        .evalSeq(filesToUpdate)
-        .evalTap(p => info"replicating ${p.fileName} to ${replica / p.fileName}")
-        .evalMap { p =>
-          Files[F].copy(p, replica / p.fileName, CopyFlags(CopyFlag.ReplaceExisting))
-        }
+        .eval(filesToUpdate)
+        .broadcastThrough(updatePipe, deletePipe)
   }
 
   def make[F[_]: Files: Concurrent: Monad: Logger](source: Path, replica: Path) =
