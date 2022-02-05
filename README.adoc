@@ -1,0 +1,8 @@
+= File-watcher
+
+
+=== First level heading
+
+```bash
+$ sbt run <path-to-source> <path-to-replica> <period-in-seconds>
+```
