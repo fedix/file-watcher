@@ -22,7 +22,7 @@ object Watcher {
         .compile
         .toList
 
-    private def createdOrUpdated(
+    private def findCreatedOrUpdated(
         sourceFiles: List[(Path, FiniteDuration)],
         replicaFiles: List[(Path, FiniteDuration)]
     ) = {
@@ -31,16 +31,18 @@ object Watcher {
       sourceFiles.collect {
         case (sourceFile, _) if !replicaFileNames.contains(sourceFile.fileName) =>
           Some(sourceFile)
+
         case (sourceFile, sourceTime) =>
           replicaFiles
             .find { case (replicaFile, replicaTime) =>
               replicaFile.fileName == sourceFile.fileName && sourceTime > replicaTime
             }
             .as(sourceFile)
+
       }.flatten
     }
 
-    private def deleted(sourceFiles: List[(Path, FiniteDuration)], replicaFiles: List[(Path, FiniteDuration)]) = {
+    private def findDeleted(sourceFiles: List[(Path, FiniteDuration)], replicaFiles: List[(Path, FiniteDuration)]) = {
       val sourceFileNames = sourceFiles.map { case (p, _) => p.fileName }
 
       replicaFiles.collect {
@@ -54,8 +56,8 @@ object Watcher {
         sourceFiles  <- listFiles(source)
         replicaFiles <- listFiles(replica)
       } yield WatchResult(
-        createdOrUpdated(sourceFiles, replicaFiles),
-        deleted(sourceFiles, replicaFiles)
+        findCreatedOrUpdated(sourceFiles, replicaFiles),
+        findDeleted(sourceFiles, replicaFiles)
       )
   }
 }

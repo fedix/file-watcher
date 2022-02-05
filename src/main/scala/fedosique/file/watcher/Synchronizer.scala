@@ -13,10 +13,9 @@ trait Synchronizer[F[_]] {
 }
 
 object Synchronizer {
-  class FileSynchronizer[F[_]: Files: Concurrent: Logger](source: Path, replica: Path, watcher: Watcher[F])
-      extends Synchronizer[F] {
+  class FileSynchronizer[F[_]: Files: Concurrent: Logger](replica: Path, watcher: Watcher[F]) extends Synchronizer[F] {
     private def updatePipe: Pipe[F, WatchResult, Unit] =
-      _.flatMap(r => Stream.emits(r.toUpdate))
+      _.flatMap(r => Stream.emits(r.toCopy))
         .evalTap(p => info"replicating ${p.fileName} to ${replica / p.fileName}")
         .mapAsync(4) { p =>
           Files[F].copy(p, replica / p.fileName, CopyFlags(CopyFlag.ReplaceExisting))
@@ -33,11 +32,11 @@ object Synchronizer {
         .broadcastThrough(updatePipe, deletePipe)
   }
 
-  def make[F[_]: Files: Async](source: Path, replica: Path, watcher: Watcher[F]): F[FileSynchronizer[F]] = {
+  def make[F[_]: Files: Async](replica: Path, watcher: Watcher[F]): F[FileSynchronizer[F]] = {
     import cats.syntax.flatMap._
 
     Slf4jLogger.create[F].flatMap { implicit l =>
-      Sync[F].delay(new FileSynchronizer[F](source, replica, watcher))
+      Sync[F].delay(new FileSynchronizer[F](replica, watcher))
     }
   }
 }

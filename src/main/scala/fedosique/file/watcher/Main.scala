@@ -1,7 +1,7 @@
 package fedosique.file.watcher
 
 import cats.effect._
-import cats.implicits.{catsSyntaxApplicativeId, catsSyntaxFlatMapOps, toTraverseOps}
+import cats.implicits._
 import fs2.io.file.{Files, Path}
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
@@ -12,21 +12,22 @@ object Main extends IOApp {
   def verifyArgs(args: List[String]): IO[Args] =
     args match {
       case source :: replica :: period :: Nil =>
-        val verifyPaths: IO[List[Path]] =
-          List(source, replica)
-            .map(Path(_))
-            .traverse(path => Files[IO].exists(path).ifM(IO(path), IO.raiseError(PathDoesNotExist(path))))
+        def verifyPath(pathStr: String): IO[Path] = {
+          val path = Path(pathStr)
+          Files[IO].exists(path).ifM(IO(path), IO.raiseError(PathDoesNotExist(path)))
+        }
 
         val verifyPeriod = period.toLongOption match {
           case Some(number) if number > 0 => FiniteDuration(number, TimeUnit.SECONDS).pure[IO]
-          case Some(_)                    => IO.raiseError(PeriodMustBePositive)
-          case None                       => IO.raiseError(PeriodMustBeInteger)
+          case Some(_)                    => IO.raiseError(NonPositivePeriod)
+          case None                       => IO.raiseError(NonIntegerPeriod)
         }
 
         for {
-          paths          <- verifyPaths
-          verifiedPeriod <- verifyPeriod
-        } yield Args(paths.head, paths.last, verifiedPeriod)
+          verifiedSource  <- verifyPath(source)
+          verifiedReplica <- verifyPath(replica)
+          verifiedPeriod  <- verifyPeriod
+        } yield Args(verifiedSource, verifiedReplica, verifiedPeriod)
 
       case _ => IO.raiseError(WrongNumberOfArguments(args.length))
     }
@@ -35,7 +36,7 @@ object Main extends IOApp {
     val watcher = Watcher.impl[IO](args.source, args.replica)
     for {
       logger       <- Slf4jLogger.create[IO]
-      synchronizer <- Synchronizer.make(args.source, args.replica, watcher)
+      synchronizer <- Synchronizer.make(args.replica, watcher)
       monitor      <- Monitor.make(synchronizer)
       _            <- logger.info("starting application")
       _            <- monitor.start(args.period)
