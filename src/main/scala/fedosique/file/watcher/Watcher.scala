@@ -22,31 +22,40 @@ object Watcher {
         .compile
         .toList
 
+    private def createdOrUpdated(
+        sourceFiles: List[(Path, FiniteDuration)],
+        replicaFiles: List[(Path, FiniteDuration)]
+    ) = {
+      val replicaFileNames = replicaFiles.map { case (p, _) => p.fileName }
+
+      sourceFiles.collect {
+        case (sourceFile, _) if !replicaFileNames.contains(sourceFile.fileName) =>
+          Some(sourceFile)
+        case (sourceFile, sourceTime) =>
+          replicaFiles
+            .find { case (replicaFile, replicaTime) =>
+              replicaFile.fileName == sourceFile.fileName && sourceTime > replicaTime
+            }
+            .as(sourceFile)
+      }.flatten
+    }
+
+    private def deleted(sourceFiles: List[(Path, FiniteDuration)], replicaFiles: List[(Path, FiniteDuration)]) = {
+      val sourceFileNames = sourceFiles.map { case (p, _) => p.fileName }
+
+      replicaFiles.collect {
+        case (replicatedFile, _) if !sourceFileNames.contains(replicatedFile.fileName) =>
+          Some(replicatedFile)
+      }.flatten
+    }
+
     override def filesToUpdate: F[WatchResult] =
       for {
         sourceFiles  <- listFiles(source)
         replicaFiles <- listFiles(replica)
-      } yield {
-        val replicaFileNames = replicaFiles.map { case (p, _) => p.fileName }
-        val sourceFileNames  = sourceFiles.map { case (p, _) => p.fileName }
-
-        val createdOrUpdated = sourceFiles.collect {
-          case (sourcePath, _) if !replicaFileNames.contains(sourcePath.fileName) =>
-            Some(sourcePath)
-          case (sourcePath, sourceTime) =>
-            replicaFiles
-              .find { case (replicaPath, replicaTime) =>
-                replicaPath.fileName == sourcePath.fileName && sourceTime > replicaTime
-              }
-              .map(_._1)
-        }.flatten
-
-        val deleted = replicaFiles.collect {
-          case (replicatedFile, _) if !sourceFileNames.contains(replicatedFile.fileName) =>
-            Some(replicatedFile)
-        }.flatten
-
-        WatchResult(createdOrUpdated, deleted)
-      }
+      } yield WatchResult(
+        createdOrUpdated(sourceFiles, replicaFiles),
+        deleted(sourceFiles, replicaFiles)
+      )
   }
 }

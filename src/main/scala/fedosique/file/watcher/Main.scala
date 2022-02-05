@@ -9,7 +9,6 @@ import scala.concurrent.duration.FiniteDuration
 //TODO: verify args
 // copy replaceExisting
 // custom error type
-// add watcher
 // add logging to file
 object Main extends IOApp {
   def program(source: Path, replica: Path, period: FiniteDuration): IO[Unit] = {
