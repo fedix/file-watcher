@@ -13,46 +13,9 @@ trait Synchronizer[F[_]] {
   def synchronize: Stream[F, Unit]
 }
 
-case class WatchResult(toUpdate: List[Path], toDelete: List[Path])
-
 object Synchronizer {
-  class FileSynchronizer[F[_]: Files: Concurrent: Monad: Logger](source: Path, replica: Path) extends Synchronizer[F] {
-    import cats.syntax.all._
-
-    private def listFiles(path: Path): F[List[(Path, FiniteDuration)]] =
-      Files[F]
-        .list(path)
-        .evalMap(p => Files[F].getLastModifiedTime(p).map(p -> _))
-        .compile
-        .toList
-
-    private def filesToUpdate =
-      for {
-        sourceFiles  <- listFiles(source)
-        replicaFiles <- listFiles(replica)
-      } yield {
-        val replicaFileNames = replicaFiles.map { case (p, _) => p.fileName }
-        val sourceFileNames  = sourceFiles.map { case (p, _) => p.fileName }
-
-        val createdOrUpdated = sourceFiles.collect {
-          case (sourcePath, _) if !replicaFileNames.contains(sourcePath.fileName) =>
-            Some(sourcePath)
-          case (sourcePath, sourceTime) =>
-            replicaFiles
-              .find { case (replicaPath, replicaTime) =>
-                replicaPath.fileName == sourcePath.fileName && sourceTime > replicaTime
-              }
-              .map(_._1)
-        }.flatten
-
-        val deleted = replicaFiles.collect {
-          case (replicatedFile, _) if !sourceFileNames.contains(replicatedFile.fileName) =>
-            Some(replicatedFile)
-        }.flatten
-
-        WatchResult(createdOrUpdated, deleted)
-      }
-
+  class FileSynchronizer[F[_]: Files: Concurrent: Monad: Logger](source: Path, replica: Path, watcher: Watcher[F])
+      extends Synchronizer[F] {
     private def updatePipe: Pipe[F, WatchResult, Unit] =
       _.flatMap(r => Stream.emits(r.toUpdate))
         .evalTap(p => info"replicating ${p.fileName} to ${replica / p.fileName}")
@@ -67,10 +30,10 @@ object Synchronizer {
 
     override def synchronize: Stream[F, Unit] =
       Stream
-        .eval(filesToUpdate)
+        .eval(watcher.filesToUpdate)
         .broadcastThrough(updatePipe, deletePipe)
   }
 
-  def make[F[_]: Files: Concurrent: Monad: Logger](source: Path, replica: Path) =
-    new FileSynchronizer[F](source, replica)
+  def make[F[_]: Files: Concurrent: Monad: Logger](source: Path, replica: Path, watcher: Watcher[F]) =
+    new FileSynchronizer[F](source, replica, watcher)
 }
