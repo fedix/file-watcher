@@ -7,9 +7,8 @@ import org.typelevel.log4cats.slf4j.Slf4jLogger
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.FiniteDuration
 //TODO: verify args
-// copy replaceExisting
 // custom error type
-// add logging to file
+
 object Main extends IOApp {
   def program(source: Path, replica: Path, period: FiniteDuration): IO[Unit] = {
     val watcher = Watcher.impl[IO](source, replica)
