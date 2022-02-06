@@ -1,9 +1,9 @@
-package fedosique.file.watcher
+package fedosique.file.watcher.lib
 
-import cats.effect.{Async, Sync}
 import cats.effect.kernel.Concurrent
-import fs2.io.file.{CopyFlag, CopyFlags, Files, Path}
+import cats.effect.{Async, Sync}
 import fs2._
+import fs2.io.file.{CopyFlag, CopyFlags, Files, Path}
 import org.typelevel.log4cats.Logger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import org.typelevel.log4cats.syntax._

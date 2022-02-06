@@ -1,4 +1,4 @@
-package fedosique.file.watcher
+package fedosique.file.watcher.lib
 
 import cats.effect.{Async, Sync, Temporal}
 import fs2._

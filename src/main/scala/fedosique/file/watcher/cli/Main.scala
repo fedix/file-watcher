@@ -1,7 +1,8 @@
-package fedosique.file.watcher
+package fedosique.file.watcher.cli
 
 import cats.effect._
 import cats.implicits._
+import fedosique.file.watcher.lib._
 import fs2.io.file.{Files, Path}
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 

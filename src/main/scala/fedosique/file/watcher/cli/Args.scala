@@ -1,4 +1,4 @@
-package fedosique.file.watcher
+package fedosique.file.watcher.cli
 
 import fs2.io.file.Path
 

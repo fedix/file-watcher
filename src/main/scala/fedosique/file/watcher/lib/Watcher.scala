@@ -1,4 +1,4 @@
-package fedosique.file.watcher
+package fedosique.file.watcher.lib
 
 import cats.Monad
 import cats.effect.kernel.Concurrent
@@ -11,8 +11,8 @@ trait Watcher[F[_]] {
 }
 
 object Watcher {
-  import cats.syntax.functor._
   import cats.syntax.flatMap._
+  import cats.syntax.functor._
 
   def impl[F[_]: Monad: Concurrent: Files](source: Path, replica: Path): Watcher[F] = new Watcher[F] {
     private def listFiles(path: Path): F[List[(Path, FiniteDuration)]] =
@@ -22,6 +22,7 @@ object Watcher {
         .compile
         .toList
 
+    // TODO: optimize
     private def findCreatedOrUpdated(
         sourceFiles: List[(Path, FiniteDuration)],
         replicaFiles: List[(Path, FiniteDuration)]
