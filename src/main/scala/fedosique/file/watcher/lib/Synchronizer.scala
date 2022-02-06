@@ -17,7 +17,7 @@ object Synchronizer {
       extends Synchronizer[F] {
     private def updatePipe: Pipe[F, WatchResult, Unit] =
       _.flatMap(r => Stream.emits(r.toCopy))
-        .evalTap(p => info"replicating ${source.relativize(p)} to ${replica / source.relativize(p)}")
+        .evalTap(p => info"replicating $source to ${replica / source.relativize(p)}")
         .mapAsync(4) { p =>
           Files[F].copy(p, replica / source.relativize(p), CopyFlags(CopyFlag.ReplaceExisting))
         }

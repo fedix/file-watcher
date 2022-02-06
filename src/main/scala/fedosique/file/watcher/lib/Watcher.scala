@@ -18,6 +18,7 @@ object Watcher {
     private def listFiles(path: Path): F[List[(Path, FiniteDuration)]] =
       Files[F]
         .walk(path)
+        .evalFilterNot(Files[F].isDirectory)
         .evalMap(p => Files[F].getLastModifiedTime(p).map(p -> _))
         .compile
         .toList
