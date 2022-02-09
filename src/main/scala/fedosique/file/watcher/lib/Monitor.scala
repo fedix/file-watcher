@@ -15,10 +15,10 @@ trait Monitor[F[_]] {
 object Monitor {
   def impl[F[_]: Temporal: Logger](synchronizer: Synchronizer[F]): Monitor[F] =
     (period: FiniteDuration) =>
-      (synchronizer.synchronize ++ Stream
+      (synchronizer.synchronize() >> Stream
         .fixedRate(period)
         .evalMap(_ => info"check source")
-        .flatMap(_ => synchronizer.synchronize)).compile.drain
+        .flatMap(_ => synchronizer.synchronize())).compile.drain
 
   def make[F[_]: Async](synchronizer: Synchronizer[F]): F[Monitor[F]] = {
     import cats.syntax.flatMap._

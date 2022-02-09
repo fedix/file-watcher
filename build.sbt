@@ -16,3 +16,5 @@ libraryDependencies ++= Seq(
 
 lazy val root = (project in file("."))
   .settings(name := "file-watcher")
+
+addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1")

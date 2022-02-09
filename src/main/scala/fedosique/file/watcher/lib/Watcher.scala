@@ -7,7 +7,7 @@ import fs2.io.file.{Files, Path}
 import scala.concurrent.duration.FiniteDuration
 
 trait Watcher[F[_]] {
-  def filesToUpdate: F[WatchResult]
+  def filesToUpdate(sourceDir: Path): F[WatchResult]
 }
 
 object Watcher {
@@ -17,8 +17,7 @@ object Watcher {
   def impl[F[_]: Monad: Concurrent: Files](source: Path, replica: Path): Watcher[F] = new Watcher[F] {
     private def listFiles(path: Path): F[List[(Path, FiniteDuration)]] =
       Files[F]
-        .walk(path)
-        .evalFilterNot(Files[F].isDirectory)
+        .list(path)
         .evalMap(p => Files[F].getLastModifiedTime(p).map(p -> _))
         .compile
         .toList
@@ -53,10 +52,10 @@ object Watcher {
       }.flatten
     }
 
-    override def filesToUpdate: F[WatchResult] =
+    override def filesToUpdate(sourceDir: Path): F[WatchResult] =
       for {
-        sourceFiles  <- listFiles(source)
-        replicaFiles <- listFiles(replica)
+        sourceFiles  <- listFiles(sourceDir)
+        replicaFiles <- listFiles(replica / source.relativize(sourceDir))
       } yield WatchResult(
         findCreatedOrUpdated(sourceFiles, replicaFiles),
         findDeleted(sourceFiles, replicaFiles)
