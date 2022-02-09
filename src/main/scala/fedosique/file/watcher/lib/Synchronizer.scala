@@ -20,69 +20,44 @@ object Synchronizer {
     import cats.syntax.flatMap._
     import cats.syntax.applicative._
 
-    private def copyFiles(paths: List[Path]) =
-      Stream
-        .emits[F, Path](paths)
-        .evalTap(p => info"replicating $p to ${replica / source.relativize(p)}")
-        .mapAsync(4)(p => Files[F].copy(p, replica / source.relativize(p), CopyFlags(CopyFlag.ReplaceExisting)))
+    private def copy(path: Path) = {
+      def copyFile(path: Path) =
+        info"replicating $path to ${replica / source.relativize(path)}" >>
+          Files[F].copy(path, replica / source.relativize(path), CopyFlags(CopyFlag.ReplaceExisting))
 
-    private def copyDirs(paths: List[Path]) =
-      Stream
-        .emits[F, Path](paths)
-        .mapAsync(4)(dir =>
-          Files[F]
-            .exists(replica / source.relativize(dir))
-            .ifM(
-              ().pure,
-              info"creating${replica / source.relativize(dir)}" >>
-                Files[F].createDirectory(replica / source.relativize(dir))
-            )
-            .as(dir)
-        )
-        .evalTap(dir => info"replicating recursively $dir")
-        .flatMap(dir => synchronize(dir))
+      def copyDir(dir: Path) =
+        Files[F]
+          .exists(replica / source.relativize(dir))
+          .ifM(
+            ().pure,
+            info"creating${replica / source.relativize(dir)}" >>
+              Files[F].createDirectory(replica / source.relativize(dir))
+          )
+          .flatTap(_ => info"replicating recursively $dir")
+          .flatMap(_ => synchronize(dir).compile.drain)
 
-    private def deleteFiles(paths: List[Path]) =
-      Stream
-        .emits[F, Path](paths)
-        .evalTap(p => info"deleting $p")
-        .mapAsync(4)(p => Files[F].delete(p))
+      Files[F].isDirectory(path).ifM(copyDir(path), copyFile(path))
+    }
 
-    private def deleteDirs(paths: List[Path]) =
-      Stream
-        .emits[F, Path](paths)
-        .evalTap(p => info"deleting recursively $p")
-        .mapAsync(4)(p => Files[F].deleteRecursively(p))
+    private def delete(path: Path) = {
+      def deleteFile(path: Path) =
+        info"deleting $path" >> Files[F].delete(path)
 
-    type ListTuple[A] = (List[A], List[A])
+      def deleteDir(path: Path) =
+        info"deleting recursively $path" >> Files[F].deleteRecursively(path)
 
-    private def separate[A](seq: List[A], condF: A => F[Boolean]): F[ListTuple[A]] =
-      seq.foldLeft((List.empty[A], List.empty[A]).pure) { (lists, a) =>
-        lists.flatMap { case (l, r) =>
-          condF(a).map { cond =>
-            if (cond) (a :: l, r)
-            else (l, a :: r)
-          }
-        }
-      }
+      Files[F].isDirectory(path).ifM(deleteDir(path), deleteFile(path))
+    }
 
     override def synchronize(dir: Path = source): Stream[F, Unit] =
       Stream.eval(info"synchronizing $dir") >>
         Stream
           .eval(watcher.filesToUpdate(dir))
           .evalTap(wr => info"$wr")
-          .evalTap { wr =>
-            (for {
-              (dirs, files) <- Stream.eval(separate(wr.toCopy, Files[F].isDirectory))
-              _             <- copyFiles(files) ++ copyDirs(dirs)
-            } yield ()).compile.drain
-          }
-          .evalTap { wr =>
-            (for {
-              (dirs, files) <- Stream.eval(separate(wr.toDelete, Files[F].isDirectory))
-              _             <- deleteFiles(files) ++ deleteDirs(dirs)
-            } yield ()).compile.drain
-          }
+          .evalTap(wr =>
+            (Stream.emits[F, Path](wr.toCopy).mapAsync(4)(copy) ++
+              Stream.emits[F, Path](wr.toDelete).mapAsync(4)(delete)).compile.drain
+          )
           .void
   }
 
