@@ -1,8 +1,8 @@
-import sbt.Keys.libraryDependencies
-
 ThisBuild / version := "0.1.0-SNAPSHOT"
 
 ThisBuild / scalaVersion := "2.13.8"
+
+Compile / run / fork := true
 
 val fs2Version = "3.2.4"
 

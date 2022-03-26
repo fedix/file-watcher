@@ -1,7 +1,6 @@
 package fedosique.file.watcher.lib
 
-import cats.Monad
-import cats.effect.kernel.Concurrent
+import cats.effect.Concurrent
 import fs2.io.file.{Files, Path}
 
 import scala.concurrent.duration.FiniteDuration
@@ -14,7 +13,7 @@ object Watcher {
   import cats.syntax.flatMap._
   import cats.syntax.functor._
 
-  def impl[F[_]: Monad: Concurrent: Files](source: Path, replica: Path): Watcher[F] = new Watcher[F] {
+  def impl[F[_]: Concurrent: Files](source: Path, replica: Path): Watcher[F] = new Watcher[F] {
     private def listFiles(path: Path): F[List[(Path, FiniteDuration)]] =
       Files[F]
         .list(path)

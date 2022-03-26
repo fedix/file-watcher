@@ -38,9 +38,8 @@ object Main extends IOApp {
     for {
       logger       <- Slf4jLogger.create[IO]
       synchronizer <- Synchronizer.make(args.source, args.replica, watcher)
-      monitor      <- Monitor.make(synchronizer)
       _            <- logger.info("starting application")
-      _            <- monitor.start(args.period)
+      _            <- Monitor.start(synchronizer, args.period)
     } yield ()
   }
 

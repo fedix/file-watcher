@@ -1,6 +1,8 @@
 package fedosique.file.watcher.lib
 
-import cats.effect.{Async, Sync, Temporal}
+import cats.effect.kernel.Resource.ExitCase
+import cats.effect.{Concurrent, Async, Temporal}
+import cats.implicits._
 import fs2._
 import org.typelevel.log4cats.Logger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
@@ -8,23 +10,26 @@ import org.typelevel.log4cats.syntax._
 
 import scala.concurrent.duration.FiniteDuration
 
-trait Monitor[F[_]] {
-  def start(period: FiniteDuration): F[Unit]
-}
-
 object Monitor {
-  def impl[F[_]: Temporal: Logger](synchronizer: Synchronizer[F]): Monitor[F] =
-    (period: FiniteDuration) =>
-      (synchronizer.synchronize() >> Stream
-        .fixedRate(period)
-        .evalMap(_ => info"check source")
-        .flatMap(_ => synchronizer.synchronize())).compile.drain
+  private def apply[F[_]: Temporal: Concurrent: Logger](
+      synchronizer: Synchronizer[F],
+      period: FiniteDuration
+  ): F[Unit] = {
+    val stream = synchronizer.synchronize() ++ Stream
+      .fixedRate(period)
+      .evalMap(_ => info"start new synchronization")
+      .flatMap(_ => synchronizer.synchronize())
+      .onFinalizeCase {
+        case ExitCase.Succeeded  => info"Monitor stopped"
+        case ExitCase.Errored(e) => error"Monitor errored: ${e.getMessage}"
+        case ExitCase.Canceled   => warn"Monitor canceled"
+      }
 
-  def make[F[_]: Async](synchronizer: Synchronizer[F]): F[Monitor[F]] = {
-    import cats.syntax.flatMap._
-
-    Slf4jLogger.create[F].flatMap { implicit l =>
-      Sync[F].delay(impl[F](synchronizer))
-    }
+    stream.compile.drain
   }
+
+  def start[F[_]: Async](synchronizer: Synchronizer[F], period: FiniteDuration): F[Unit] =
+    Slf4jLogger
+      .create[F]
+      .flatMap(implicit l => Monitor(synchronizer, period))
 }

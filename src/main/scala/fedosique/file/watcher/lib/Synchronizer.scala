@@ -1,7 +1,7 @@
 package fedosique.file.watcher.lib
 
-import cats.effect.kernel.Concurrent
-import cats.effect.{Async, Sync}
+import cats.effect.Resource.ExitCase
+import cats.effect.{Async, Concurrent}
 import fs2._
 import fs2.io.file.{CopyFlag, CopyFlags, Files, Path}
 import org.typelevel.log4cats.Logger
@@ -46,21 +46,25 @@ object Synchronizer {
     }
 
     override def synchronize(dir: Path = source): Stream[F, Unit] =
-      Stream.eval(info"synchronizing $dir") >>
-        Stream
-          .eval(watcher.filesToUpdate(dir))
-          .evalTap(wr => info"$wr")
-          .flatMap(wr =>
-            Stream.emits[F, Path](wr.toCopy).mapAsync(4)(copy) ++
-              Stream.emits[F, Path](wr.toDelete).mapAsync(4)(delete)
-          )
+      Stream
+        .eval(info"synchronizing $dir" >> watcher.filesToUpdate(dir))
+        .evalTap(wr => info"$wr")
+        .flatMap(wr =>
+          Stream.emits[F, Path](wr.toCopy).mapAsync(4)(copy) ++
+            Stream.emits[F, Path](wr.toDelete).mapAsync(4)(delete)
+        )
+        .onFinalizeCase {
+          case ExitCase.Succeeded  => info"synchronization completed"
+          case ExitCase.Errored(e) => error"synchronization failed: ${e.getMessage}"
+          case ExitCase.Canceled   => warn"synchronization canceled"
+        }
   }
 
   def make[F[_]: Files: Async](source: Path, replica: Path, watcher: Watcher[F]): F[FileSynchronizer[F]] = {
-    import cats.syntax.flatMap._
+    import cats.syntax.functor._
 
-    Slf4jLogger.create[F].flatMap { implicit l =>
-      Sync[F].delay(new FileSynchronizer[F](source, replica, watcher))
+    Slf4jLogger.create[F].map { implicit l =>
+      new FileSynchronizer[F](source, replica, watcher)
     }
   }
 }
